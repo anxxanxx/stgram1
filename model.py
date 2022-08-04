@@ -1,9 +1,15 @@
+"""
+modification made on the basis of link:https://github.com/Xiaoccer/MobileFaceNet_Pytorch
+"""
 from mindspore import dtype as mstype
 from mindspore import nn
 import mindspore
 from mindspore.common.initializer import Zero
 from mindspore import Parameter
+#import torch
+#import torch.nn.functional as F
 import math
+#from torch.nn import Parameter
 
 
 class Bottleneck(nn.Cell):
@@ -13,19 +19,19 @@ class Bottleneck(nn.Cell):
         #
         self.conv = nn.SequentialCell(
             # pw
-            nn.Conv2d(inp, inp * expansion, 1, 1, 0, has_bias=False),
+            nn.Conv2d(in_channels =inp,out_channels = inp * expansion, kernel_size=1,stride= 1,pad_mode='pad',padding= 0, has_bias=False),
             nn.BatchNorm2d(num_features=inp * expansion),
             nn.PReLU(inp * expansion),
             # nn.ReLU(inplace=True),
 
             # dw
-            nn.Conv2d(inp * expansion, inp * expansion, 3, stride, 1, groups=inp * expansion, has_bias=False),
+            nn.Conv2d(in_channels =inp * expansion,out_channels = inp * expansion,kernel_size= 3,stride= stride, pad_mode='pad',padding=1, group=inp * expansion, has_bias=False),
             nn.BatchNorm2d(num_features=inp * expansion),
             nn.PReLU(inp * expansion),
             # nn.ReLU(inplace=True),
 
             # pw-linear
-            nn.Conv2d(inp * expansion, oup, 1, 1, 0, has_bias=False),
+            nn.Conv2d(in_channels =inp * expansion,out_channels = oup,kernel_size= 1,stride= 1, pad_mode='pad',padding= 0, has_bias=False),
             nn.BatchNorm2d(num_features=oup),
         )
 
@@ -41,9 +47,9 @@ class ConvBlock(nn.Cell):
         super(ConvBlock, self).__init__()
         self.linear = linear
         if dw:
-            self.conv = nn.Conv2d(inp, oup, k, s, p, groups=inp, has_bias=False)
+            self.conv = nn.Conv2d(in_channels =inp, out_channels=oup, kernel_size=k,stride= s,pad_mode='pad',padding= p, group=inp, has_bias=False)
         else:
-            self.conv = nn.Conv2d(inp, oup, k, s, p, has_bias=False)
+            self.conv = nn.Conv2d(in_channels =inp, out_channels=oup, kernel_size=k,stride= s,pad_mode='pad',padding= p, has_bias=False)
         self.bn = nn.BatchNorm2d(num_features=oup)
         if not linear:
             self.prelu = nn.PReLU(oup)
@@ -102,7 +108,7 @@ class MobileFaceNet(nn.Cell):
         self.fc_out = nn.Dense(128, num_class)
         self.arcface = arcface
         # init
-        for m in self.modules():
+        for m in self.cells():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
@@ -145,9 +151,10 @@ class TgramNet(nn.Cell):
         print(self.conv_extrctor.shape)
         self.conv_encoder = nn.SequentialCell(
             *[nn.SequentialCell(
-               # nn.LayerNorm(313),
-                nn.LeakyReLU(0.2, inplace=True),
-                 nn.Conv1d(mel_bins, mel_bins, 3, 1, 1, has_bias=False)
+                nn.LayerNorm((313,)),
+               # nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(0.2),
+                 nn.Conv1d(in_channels=mel_bins, out_channels =mel_bins,kernel_size= 3,stride= 1, pad_mode='pad',padding=1, has_bias=False)
                ) for _ in range(num_layer)])
     def forward(self, x):
         out = self.conv_extrctor(x)
@@ -166,10 +173,10 @@ class STgramMFN(nn.Cell):
                  arcface=None):
         super(STgramMFN, self).__init__()
         self.arcface = arcface
-#        self.tgramnet = TgramNet(mel_bins=c_dim, win_len=win_len, hop_len=hop_len)
-#         self.mobilefacenet = MobileFaceNet(num_class=num_class,
-#                                            bottleneck_setting=bottleneck_setting,
-#                                            arcface=arcface)
+        self.tgramnet = TgramNet(mel_bins=c_dim, win_len=win_len, hop_len=hop_len)
+        self.mobilefacenet = MobileFaceNet(num_class=num_class,
+                                           bottleneck_setting=bottleneck_setting,
+                                           arcface=arcface)
 
     def get_tgram(self, x_wav):
         return self.tgramnet(x_wav)

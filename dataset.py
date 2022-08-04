@@ -1,3 +1,6 @@
+#import torch
+#from torch.utils.data import Dataset
+#import torchaudio
 import mindspore
 import joblib
 import librosa
@@ -7,6 +10,7 @@ import os
 import numpy as np
 import mindspore.dataset as ds
 import mindspore.dataset.transforms as transforms
+#import torchaudio.models.wav2vec2.components
 
 
 class Generator(object):

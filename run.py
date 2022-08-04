@@ -1,7 +1,10 @@
 import argparse
+#import torch.backends.cudnn as cudnn
 import yaml
+import torch
 import mindspore
 from dataset import *
+from mindspore import nn
 from model import STgramMFN, ArcMarginProduct
 from trainer import *
 import mindspore.dataset as ds
@@ -62,6 +65,7 @@ def preprocess():
                            ID_factor=args.ID_factor)
 
 
+#def test(args):
 def test(args):
     if args.arcface:
         arcface = ArcMarginProduct(128, args.num_class, m=args.m, s=args.s)
@@ -94,7 +98,7 @@ def test(args):
                                        optimizer=None,
                                        scheduler=None,
                                        args=args)
-        trainer.test(save=True)
+        trainer.tes(save=True)
 
 
 def train(args):
@@ -122,48 +126,17 @@ def train(args):
                                                 hop_length=args.hop_length,
                                                 win_length=args.win_length,
                                                 power=args.power)
-  #  print(type(train_clf_dataset))
-    #train_clf_loader = torch.utils.data.DataLoader
-   # train_clf_loader = mindspore.utils.data.DataLoader(
- #   dataset = ds.batch(batch_size=args.batch_size)
- #    sampler = ds.SequentialSampler()
- #    dataset = ds.NumpySlicesDataset(train_clf_dataset, sampler=sampler)
- #    class DatasetGenerator:
- #        def __init__(self,
- #                     batch_size=args.batch_size,
- #                     train_clf_dataset=train_clf_dataset,
- #                     #shuffle=False,
- #                     #num_parallel_workers=args.workers,
- #                     pin_memory=True,
- #                     drop_last=True):
- #            self.batch_size=batch_size
- #            #self.shuffle=shuffle
- #            #self.num_parallel_worker=num_parallel_workers
- #            self.pin_memory=pin_memory
- #            self.drop_last=drop_last
- #            self.train_clf_dataset=train_clf_dataset
- #        def __getitem__(self, item):
- #            pass
- #        def __len__(self):
- #            return len(self.train_clf_dataset)
+  
     #train_clf_loader1=DatasetGenerator()
-    train_clf_loader=ds.GeneratorDataset(source=train_clf_dataset,
-                                         num_parallel_workers=args.workers,
-                                         column_names=None,
-                                         drop_remainder=True,
-                                         schema=None,
-                                         shuffle=False)
-    # train_clf_loader =ds.GeneratorDataset(
-    #     train_clf_dataset,
-    #     #batch_size=args.batch_size,
-    #     shuffle=False,
-    #     num_parallel_workers=args.workers)
-    #     #pin_memory=True,
-    #    # drop_last=True)
-   # print(type(train_clf_dataset))
-    optimizer = mindspore.nn.Adam(model.parameters(), lr=args.lr)
-    #
-    scheduler =mindspore.nn.cosine_decay_lr(optimizer, T_max=len(train_clf_loader), eta_min=0, last_epoch=-1)
+    sampler = ds.SequentialSampler()
+    dataset = ds.NumpySlicesDataset(train_clf_dataset, sampler=sampler)
+    dataset = dataset.batch(batch_size=args.batch_size,drop_remainder=True,num_parallel_workers=8)
+    train_clf_loader=dataset.create_dict_iterator()
+
+    optimizer = mindspore.nn.Adam(params=model.get_parameters(), learning_rate=args.lr)
+   # scheduler =mindspore.nn.cosine_decay_lr( max_lr=len(list(train_clf_loader)), min_lr =0)
+    scheduler = mindspore.nn.cosine_decay_lr(min_lr = 0.0, max_lr=args.lr,decay_epoch=300, step_per_epoch=128,
+                                                           total_step=34800)
     # 此处进行引入方便调试
     from mindspore import context, Tensor
     from mindspore.communication import init, get_rank
@@ -174,21 +147,21 @@ def train(args):
     init("nccl")
     value = get_rank()
 
-    # with mindspore.cuda.device(args.device_ids[0]):
-    args.dp = False
+    with mindspore.cuda.device(args.device_ids[0]):
+        args.dp = False
     #if len(args.device_ids) > 1:
      #   args.dp = True
      #   model = torch.nn.DataParallel(model, device_ids=args.device_ids)
-    trainer = wave_Mel_MFN_trainer(data_dir=args.data_dir,
+        trainer = wave_Mel_MFN_trainer(data_dir=args.data_dir,
                                    id_fctor=args.ID_factor,
                                    classifier=model,
                                    arcface=arcface,
                                    optimizer=optimizer,
                                    scheduler=scheduler,
                                    args=args)
-    context.set_auto_parallel_context(parallel_mode=ParallelMode.AUTO_PARALLEL, gradients_mean=True)
-    loss_cb = LossMonitor()
-    trainer.train(train_clf_loader)
+    #context.set_auto_parallel_context(parallel_mode=ParallelMode.AUTO_PARALLEL, gradients_mean=True)
+        loss_cb = LossMonitor()
+        trainer.train(train_clf_loader)
 
 
 
